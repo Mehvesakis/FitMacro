@@ -1,207 +1,123 @@
-import { formatFoodDisplayName } from '../utils/aiFoodSimulation'
-import {
-  fuzzyMatchFoodKey,
-  parsePortionMultiplier,
-  scaleNutritionValues,
-} from '../utils/foodMatching'
-import { foodDatabase } from '../utils/foodDatabase'
-import { normalizeFoodText } from '../utils/foodUtils'
-import {
-  caloriesFromMacros,
-  normalizeNutrition,
-  toNumber,
-} from '../utils/nutritionUtils'
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const AI_SIMULATION_DELAY_MS = 2000
+const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
 
-const ANALYSIS_PROMPT = (userText) =>
-  `Kullanıcının girdiği şu besin metnini analiz et ve porsiyon boyutunu da göz önüne alarak SADECE şu JSON formatında cevap ver: { "name": "Besin Adı", "calories": 100, "protein": 10, "carbs": 20, "fat": 5 }. Başka hiçbir metin ekleme. Besin metni: "${userText}"`
+// GÜNCELLENDİ: JSON formatına "warning" alanı eklendi
+const BASE_SYSTEM_PROMPT = `Sen profesyonel bir yapay zeka diyetisyenisin. Görevin, sana verilen metni veya fotoğrafı analiz edip SADECE aşağıdaki JSON formatında cevap vermektir. Başka hiçbir açıklama, markdown işareti (\`\`\`json vb.) veya metin ekleme.
+Format: {"name": "Besin Adı", "calories": 100, "protein": 10, "carbs": 20, "fat": 5, "warning": "Kullanıcının hastalığına risk oluşturuyorsa uyarı yaz, yoksa boş bırak"}`;
 
-function delay(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms)
-  })
-}
-
-function capitalizeWords(text) {
-  return text
-    .split(' ')
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toLocaleUpperCase('tr-TR') + word.slice(1))
-    .join(' ')
-}
-
-function extractFoodLabel(userText) {
-  let cleaned = normalizeFoodText(userText)
-  cleaned = cleaned
-    .replace(/\byarım\b/g, '')
-    .replace(/\bçeyrek\b/g, '')
-    .replace(/\bdilim\b/g, '')
-    .replace(/\bporsiyon\b/g, '')
-    .replace(/\b(\d+(?:[.,]\d+)?)\b/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-  return cleaned || userText.trim()
-}
-
-function buildDisplayName(portionLabel, foodLabel) {
-  if (portionLabel) {
-    return `${portionLabel} ${capitalizeWords(foodLabel)}`
-  }
-
-  return capitalizeWords(foodLabel)
-}
-
-function normalizeAnalysisResult(raw) {
-  const protein = Math.round(toNumber(raw.protein))
-  const carbs = Math.round(toNumber(raw.carbs))
-  const fat = Math.round(toNumber(raw.fat))
-  const calories =
-    toNumber(raw.calories) || caloriesFromMacros(protein, carbs, fat)
-
-  return {
-    name: String(raw.name ?? 'Bilinmeyen Besin').trim(),
-    calories: Math.round(calories),
-    protein,
-    carbs,
-    fat,
-  }
-}
-
-function parseJsonFromAIContent(content) {
-  const jsonMatch = content.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
-    throw new Error('AI yanıtında JSON bulunamadı')
-  }
-
-  return normalizeAnalysisResult(JSON.parse(jsonMatch[0]))
-}
-
-async function callOpenAI(userText) {
-  const apiKey = import.meta.env.VITE_AI_API_KEY
-  const apiUrl =
-    import.meta.env.VITE_AI_API_URL ||
-    'https://api.openai.com/v1/chat/completions'
-  const model = import.meta.env.VITE_AI_MODEL || 'gpt-4o-mini'
-
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.2,
-      messages: [
-        {
-          role: 'system',
-          content:
-            'Sen bir beslenme uzmanısın. Yalnızca istenen JSON formatında yanıt ver.',
-        },
-        {
-          role: 'user',
-          content: ANALYSIS_PROMPT(userText),
-        },
-      ],
-    }),
-  })
-
-  if (!response.ok) {
-    throw new Error(`AI API hatası: ${response.status}`)
-  }
-
-  const data = await response.json()
-  const content = data?.choices?.[0]?.message?.content
-
-  if (!content) {
-    throw new Error('AI yanıtı boş geldi')
-  }
-
-  return parseJsonFromAIContent(content)
-}
-
-async function generateMockAnalysis(userText) {
-  await delay(AI_SIMULATION_DELAY_MS)
-
-  const { multiplier, label: portionLabel } = parsePortionMultiplier(userText)
-  const matchedKey = fuzzyMatchFoodKey(userText, Object.keys(foodDatabase))
-  const foodLabel = matchedKey
-    ? formatFoodDisplayName(matchedKey)
-    : capitalizeWords(extractFoodLabel(userText))
-
-  if (matchedKey) {
-    const baseNutrition = normalizeNutrition(foodDatabase[matchedKey])
-    const scaled = scaleNutritionValues(baseNutrition, multiplier)
-
-    return {
-      name: buildDisplayName(
-        portionLabel,
-        matchedKey ? formatFoodDisplayName(matchedKey) : foodLabel,
-      ),
-      calories: scaled.calories,
-      protein: scaled.protein,
-      carbs: scaled.carbs,
-      fat: scaled.fat,
-    }
-  }
-
-  const estimatedCalories = Math.max(Math.round(80 * multiplier), 0)
-  const estimatedProtein = Math.max(Math.round(4 * multiplier), 0)
-  const estimatedCarbs = Math.max(Math.round(10 * multiplier), 0)
-  const estimatedFat = Math.max(Math.round(3 * multiplier), 0)
-
-  return {
-    name: buildDisplayName(portionLabel, foodLabel),
-    calories: caloriesFromMacros(
-      estimatedProtein,
-      estimatedCarbs,
-      estimatedFat,
-    ) || estimatedCalories,
-    protein: estimatedProtein,
-    carbs: estimatedCarbs,
-    fat: estimatedFat,
-  }
-}
-
-export async function analyzeFoodWithAI(userText) {
-  const trimmed = userText?.trim()
-
-  if (!trimmed) {
-    throw new Error('Analiz edilecek besin metni boş olamaz')
-  }
-
-  const apiKey = import.meta.env.VITE_AI_API_KEY
-
+function cleanAndParseJSON(text) {
   try {
-    if (!apiKey) {
-      return await generateMockAnalysis(trimmed)
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) {
+      return JSON.parse(match[0]);
     }
-
-    return await callOpenAI(trimmed)
+    const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(cleaned);
   } catch (error) {
-    console.warn('[KaloriAI] AI analizi başarısız, simülasyon moduna geçiliyor:', error)
-    return generateMockAnalysis(trimmed)
+    console.error("JSON parse hatası detayı:", error, "Gelen Metin:", text);
+    throw new Error("Yapay zeka geçerli bir JSON döndürmedi.");
   }
 }
 
-export function createMealFromAIAnalysis(analysis, searchInput) {
-  const normalized = normalizeAnalysisResult(analysis)
+// YENİ: Kullanıcı profilini yapay zekanın anlayacağı talimatlara çeviren köprü
+function buildPromptWithProfile(userText, userProfile) {
+  let prompt = BASE_SYSTEM_PROMPT;
 
+  if (userProfile) {
+    const diseasesText = userProfile.diseases?.length > 0 ? userProfile.diseases.join(', ') : 'Yok';
+    const breastfeedingText = userProfile.isBreastfeeding ? 'Evet (Günlük enerji ve sıvı ihtiyacı artmıştır)' : 'Hayır';
+    
+    prompt += `\n\nKULLANICI PROFİLİ (Besini analiz ederken mutlaka bu durumu göz önünde bulundur):
+    - Beden Kitle İndeksi (BKİ): ${userProfile.bmi} (${userProfile.bmiCategory})
+    - Kronik Hastalıklar: ${diseasesText}
+    - Emzirme Durumu: ${breastfeedingText}
+    - Aktivite Seviyesi: ${userProfile.activityLabel || 'Bilinmiyor'}
+    
+    ÖNEMLİ GÖREV: Eğer kullanıcının kronik hastalığı (örneğin Diyabet) analiz ettiğin bu besinle (örneğin aşırı şekerli tatlı) ters düşüyorsa, JSON formatındaki 'warning' alanına empatik ama uyarıcı kısa bir mesaj yaz. Eğer besin profiline uygunsa 'warning' alanını boş ("") bırak.`;
+  }
+
+  prompt += `\n\nKullanıcı Girdisi: "${userText}"`;
+  return prompt;
+}
+
+// GÜNCELLENDİ: Fonksiyon artık userProfile parametresi alıyor
+export async function analyzeFoodWithAI(userText, userProfile = null) {
+  if (!import.meta.env.VITE_GEMINI_API_KEY) {
+    throw new Error("Gemini API Anahtarı eksik!");
+  }
+
+  const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
+  const prompt = buildPromptWithProfile(userText, userProfile);
+
+  const result = await model.generateContent(prompt);
+  return cleanAndParseJSON(result.response.text());
+}
+
+// GÜNCELLENDİ: Fonksiyon artık userProfile parametresi alıyor
+export async function analyzeFoodImageWithGemini(base64Image, userProfile = null) {
+  if (!import.meta.env.VITE_GEMINI_API_KEY) {
+    throw new Error("Gemini API Anahtarı eksik!");
+  }
+
+  const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
+  const prompt = buildPromptWithProfile(
+    "Bu fotoğraftaki yemeği/yemekleri analiz et, tahmini porsiyonunu düşünerek makrobesin değerlerini hesapla.", 
+    userProfile
+  );
+
+  const imageParts = [{
+    inlineData: {
+      data: base64Image.split(',')[1],
+      mimeType: "image/jpeg"
+    }
+  }];
+
+  const result = await model.generateContent([prompt, ...imageParts]);
+  return cleanAndParseJSON(result.response.text());
+}
+
+// GÜNCELLENDİ: Warning (uyarı) mesajı da listeye eklendi
+export function createMealFromAIAnalysis(analysis, searchInput = "Fotoğraf Analizi") {
   return {
     id: crypto.randomUUID(),
-    name: `${normalized.name} - ${normalized.calories} kcal`,
+    name: `${analysis.name} - ${analysis.calories} kcal`,
     searchInput: searchInput.trim(),
-    matchedKey: null,
     addedAt: new Date(),
-    calories: normalized.calories,
-    protein: normalized.protein,
-    carbs: normalized.carbs,
-    fat: normalized.fat,
+    calories: analysis.calories,
+    protein: analysis.protein,
+    carbs: analysis.carbs,
+    fat: analysis.fat,
     fiber: 0,
-    source: import.meta.env.VITE_AI_API_KEY ? 'ai' : 'ai-simulation',
+    warning: analysis.warning || null, // UI'da göstermek için uyarıyı yakalıyoruz
+    source: 'gemini-vision-ai',
   }
 }
+// Premium Diyet Listesi Oluşturucu
+export async function generatePremiumDietPlan(profile, dailyCalories, macroTargets) {
+  if (!import.meta.env.VITE_GEMINI_API_KEY) throw new Error("Gemini API Anahtarı eksik!");
+  
+  const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
+  
+  const prompt = `Sen profesyonel ve modern bir yapay zeka diyetisyenisin. Kullanıcının özelliklerine, günlük kalori hedefine ve makrolarına tam uyan, uygulanabilir, lezzetli ve sağlıklı bir 1 günlük diyet listesi hazırla.
+  
+  KULLANICI BİLGİLERİ:
+  - Günlük Hedef: ${dailyCalories} kcal
+  - Makrolar: ${macroTargets.protein}g Protein, ${macroTargets.carbs}g Karbonhidrat, ${macroTargets.fat}g Yağ
+  - Kronik Hastalıklar: ${profile.diseases?.length > 0 ? profile.diseases.join(', ') : 'Yok'}
+  - Emzirme Durumu: ${profile.isBreastfeeding ? 'Evet' : 'Hayır'}
+  
+  LÜTFEN SADECE AŞAĞIDAKİ JSON FORMATINDA CEVAP VER. Başka hiçbir metin ekleme. İçerik detaylarında pratik malzemeler (örn: yulaf, chia tohumu, fıstık ezmesi, yumurta, süzme peynir, ton balığı, tavuk göğsü vb.) kullanmaya özen göster.
+  
+  {
+    "breakfast": { "title": "Kahvaltı Adı", "description": "İçerik ve porsiyon detayı", "calories": 400 },
+    "snack1": { "title": "1. Ara Öğün", "description": "İçerik detayı", "calories": 200 },
+    "lunch": { "title": "Öğle Yemeği", "description": "İçerik detayı", "calories": 600 },
+    "snack2": { "title": "2. Ara Öğün", "description": "İçerik detayı", "calories": 200 },
+    "dinner": { "title": "Akşam Yemeği", "description": "İçerik detayı", "calories": 700 },
+    "motivation": "Kullanıcının profiline uygun kısa, motive edici bir cümle."
+  }`;
 
-export { AI_SIMULATION_DELAY_MS }
+  const result = await model.generateContent(prompt);
+  return cleanAndParseJSON(result.response.text());
+}

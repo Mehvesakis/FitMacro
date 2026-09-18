@@ -17,23 +17,6 @@ const tabs = [
     ),
   },
   {
-    id: 'profil',
-    label: 'Profil',
-    icon: (
-      <svg
-        className="h-4 w-4 text-gray-500"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        aria-hidden="true"
-      >
-        <circle cx="12" cy="8" r="4" />
-        <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
     id: 'ekle',
     label: 'Ekle',
     icon: (
@@ -49,6 +32,41 @@ const tabs = [
       </svg>
     ),
   },
+  {
+    id: 'premium',
+    label: 'Premium',
+    icon: (
+      <svg
+        className="h-4 w-4 text-amber-500"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <polygon points="2 20 22 20 19 9 15 15 12 7 9 15 5 9 2 20" />
+      </svg>
+    ),
+  },
+  {
+    id: 'profil',
+    label: 'Profil',
+    icon: (
+      <svg
+        className="h-4 w-4 text-gray-500"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        aria-hidden="true"
+      >
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" strokeLinecap="round" />
+      </svg>
+    ),
+  }
 ]
 
 export default function NavTabs({ activeTab, onTabChange }) {
