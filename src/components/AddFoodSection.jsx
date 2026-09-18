@@ -12,7 +12,7 @@ import {
 } from '../utils/alternativeRecipes'
 import { loadMealsByDate } from '../utils/storage'
 
-// Sabit (Fallback) Favoriler
+// Sabit (Fallback) Favoriler (Sadece isim ve makro bilgileri)
 const FAVORITE_MEALS = [
   { id: 'fav1', name: 'Yulaf & Chia Karışımı', calories: 280, protein: 12, carbs: 45, fat: 8, fiber: 10 },
   { id: 'fav2', name: 'Quark & Orman Meyveleri', calories: 150, protein: 15, carbs: 18, fat: 2, fiber: 4 },
@@ -216,24 +216,25 @@ export default function AddFoodSection({ meals, selectedDate, onAddMeal, onRemov
       onAddMeal(meal)
       setQuery('')
     } catch (error) {
-      console.error('[KaloriAI] Besin analizi başarısız:', error)
+      console.error('[FitMacro] Besin analizi başarısız:', error)
     } finally {
       setIsAnalyzing(false)
     }
   }
 
   function handleQuickAdd(foodItem) {
+    const cleanName = foodItem.name.replace(/\s*-\s*\d+\s*kcal/i, '')
     const newMeal = {
       id: crypto.randomUUID(),
-      name: foodItem.name,
+      name: cleanName,
       calories: foodItem.calories,
       protein: foodItem.protein || 0,
       carbs: foodItem.carbs || 0,
       fat: foodItem.fat || 0,
       fiber: foodItem.fiber || 0,
       addedAt: new Date(),
-      matchedKey: foodItem.name,
-      searchInput: foodItem.name,
+      matchedKey: cleanName,
+      searchInput: cleanName,
     }
     onAddMeal(newMeal)
   }
@@ -274,26 +275,40 @@ export default function AddFoodSection({ meals, selectedDate, onAddMeal, onRemov
         </div>
       )}
 
-      {/* 2. DİNAMİK FAVORİLER (HIZLI EKLE) */}
+      {/* 2. DİNAMİK FAVORİLER (HIZLI EKLE) - KOMPAKT YATAY KARUSEL */}
       <div className="mb-8">
-        <h2 className="mb-3 text-sm font-bold text-gray-800">Sık Tüketilenler</h2>
-        <div className="flex flex-col gap-2">
-          {dynamicFavorites.map((meal) => (
-            <div key={meal.id} className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-4 shadow-sm transition-all hover:border-mint-200">
-              <div>
-                <p className="text-sm font-bold text-gray-800">{meal.name}</p>
-                <p className="mt-0.5 text-xs font-medium text-gray-500">{meal.calories} kcal · {meal.protein}g Protein</p>
-              </div>
-              <button
-                onClick={() => handleQuickAdd(meal)}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-mint-50 text-kalori-green transition-transform hover:scale-110 active:scale-95"
+        <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-gray-400">
+          Sık Tüketilenler
+        </h2>
+        <div className="flex gap-3 overflow-x-auto pb-3 pt-1 snap-x scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          {dynamicFavorites.map((meal) => {
+            const cleanTitle = meal.name.replace(/\s*-\s*\d+\s*kcal/i, '')
+            return (
+              <div
+                key={meal.id}
+                className="flex w-[145px] shrink-0 snap-start flex-col justify-between rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm transition-all hover:border-mint-200"
               >
-                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                  <path d="M12 5v14M5 12h14" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-            </div>
-          ))}
+                <p className="line-clamp-2 text-sm font-bold leading-snug text-gray-800">
+                  {cleanTitle}
+                </p>
+                
+                <div className="mt-3 flex items-end justify-between border-t border-gray-50 pt-2">
+                  <span className="text-xs font-bold text-gray-400">
+                    {meal.calories} kcal
+                  </span>
+                  <button
+                    onClick={() => handleQuickAdd(meal)}
+                    aria-label="Hızlı ekle"
+                    className="flex h-7 w-7 items-center justify-center rounded-full bg-mint-50 text-kalori-green transition-all hover:scale-110 hover:bg-kalori-green hover:text-white active:scale-95"
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                      <path d="M12 5v14M5 12h14" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
 
