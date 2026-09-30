@@ -143,6 +143,7 @@ function MealItem({ meal, onRemove }) {
               <span className="rounded bg-mint-50 px-2 py-0.5 text-kalori-green">{meal.protein}g P</span>
               <span className="rounded bg-orange-50 px-2 py-0.5 text-orange-500">{meal.carbs}g K</span>
               <span className="rounded bg-blue-50 px-2 py-0.5 text-blue-500">{meal.fat}g Y</span>
+              <span className="rounded bg-purple-50 px-2 py-0.5 text-purple-500">{meal.fiber || 0}g L</span>
             </div>
           )}
         </div>

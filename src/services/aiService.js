@@ -2,9 +2,9 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
 
-// GÜNCELLENDİ: JSON formatına "warning" alanı eklendi
+// GÜNCELLENDİ: JSON formatına "fiber" (lif) ve "warning" alanı eklendi
 const BASE_SYSTEM_PROMPT = `Sen profesyonel bir yapay zeka diyetisyenisin. Görevin, sana verilen metni veya fotoğrafı analiz edip SADECE aşağıdaki JSON formatında cevap vermektir. Başka hiçbir açıklama, markdown işareti (\`\`\`json vb.) veya metin ekleme.
-Format: {"name": "Besin Adı", "calories": 100, "protein": 10, "carbs": 20, "fat": 5, "warning": "Kullanıcının hastalığına risk oluşturuyorsa uyarı yaz, yoksa boş bırak"}`;
+Format: {"name": "Besin Adı", "calories": 100, "protein": 10, "carbs": 20, "fat": 5, "fiber": 3, "warning": "Kullanıcının hastalığına risk oluşturuyorsa uyarı yaz, yoksa boş bırak"}`;
 
 function cleanAndParseJSON(text) {
   try {
@@ -77,7 +77,7 @@ export async function analyzeFoodImageWithGemini(base64Image, userProfile = null
   return cleanAndParseJSON(result.response.text());
 }
 
-// GÜNCELLENDİ: Warning (uyarı) mesajı da listeye eklendi
+// GÜNCELLENDİ: Yapay zekadan dönen "fiber" (lif) değeri artık dinamik olarak alınıyor.
 export function createMealFromAIAnalysis(analysis, searchInput = "Fotoğraf Analizi") {
   return {
     id: crypto.randomUUID(),
@@ -88,11 +88,12 @@ export function createMealFromAIAnalysis(analysis, searchInput = "Fotoğraf Anal
     protein: analysis.protein,
     carbs: analysis.carbs,
     fat: analysis.fat,
-    fiber: 0,
-    warning: analysis.warning || null, // UI'da göstermek için uyarıyı yakalıyoruz
+    fiber: analysis.fiber || 0, // YENİ: Artık sabit 0 değil, AI ne gönderirse o!
+    warning: analysis.warning || null,
     source: 'gemini-vision-ai',
   }
 }
+
 // Premium Diyet Listesi Oluşturucu
 export async function generatePremiumDietPlan(profile, dailyCalories, macroTargets) {
   if (!import.meta.env.VITE_GEMINI_API_KEY) throw new Error("Gemini API Anahtarı eksik!");
